@@ -1,4 +1,4 @@
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 router_prompt = ChatPromptTemplate.from_messages(
     [
@@ -64,5 +64,16 @@ code_gen_prompt = ChatPromptTemplate.from_messages(
          {context}
          """),
         ("human", "[요구사항]:\n{question}")
+    ]
+)
+
+# ReAct 에이전트를 위한 프롬프트를 정의합니다.
+# 이 프롬프트는 에이전트가 '생각 -> 행동 -> 관찰' 사이클을 따르도록 지시합니다.
+react_agent_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", "너는 사용자의 질문에 답변하는 똑똑한 AI 어시스턴트야. 필요하다면 주어진 도구를 사용해서 정보를 찾아 답변할 수 있어."),
+        ("user", "{input}"),
+        # MessagesPlaceholder는 에이전트의 '생각'과 '행동' 기록(스크래치패드)이 저장되는 곳입니다.
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ]
 )

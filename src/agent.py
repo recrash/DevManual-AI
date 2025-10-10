@@ -6,8 +6,12 @@ from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnablePassthrough
 from langchain_community.vectorstores import FAISS
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+
 # 저장된 프롬프트
-from .prompts import rag_prompt, router_prompt, code_gen_prompt
+from .prompts import rag_prompt, router_prompt, code_gen_prompt, react_agent_prompt
+# 인터넷 검색용
+from .tools import search_tool
 
 
 class AgentState(TypedDict):
@@ -207,11 +211,33 @@ workflow.add_edge("code_generation_node", END) # 새로 추가한 엣지
 # 그래프를 실행 가능한 앱으로 컴파일한다.
 app = workflow.compile()
 
-# agent.py 테스트용
-# if __name__ == "__main__":
-#     # 이제 코드 생성 질문으로 테스트해보자!
-#     inputs = {"question": "LangGraph의 StateGraph에 대해 설명하는 마크다운(md) 형식의 문서를 만들어줘"}
-#     final_state = app.invoke(inputs)
 
-#     print("\n---최종 상태---")
-#     print(final_state.get('answer', '답변이 생성되지 않았습니다.'))
+# ReAct용 인터넷 검색 툴
+tools = [search_tool]
+
+# ReAct 에이전트의 llm 설정
+# 기존에 사용하던 gpt-4o-mini 모델을 그대로 사용
+llm = AzureChatOpenAI(
+    azure_endpoint=os.getenv("AOAI_ENDPOINT"),
+    api_key=os.getenv("AOAI_API_KEY"),
+    azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O_MINI"),
+    api_version="2024-02-01",
+    temperature=0
+)
+
+# 프롬프트, LLM, 도구를 하나로 묶어 ReAct 에이전트를 생성
+react_agent = create_tool_calling_agent(llm, tools, react_agent_prompt)
+
+# 생성된 에이전트와 도구를 바탕으로 실행기 생성
+react_agent_executor = AgentExecutor(agent=react_agent, tools=tools, verbose=True)
+
+# agent.py 테스트용
+if __name__ == "__main__":
+    # ReAct 에이전트가 웹 검색을 잘 하는지 테스트해보자!
+    question = {"input": "LangChain의 최신 버전은 뭐야?"}
+    
+    print("\n--- ReAct 에이전트 테스트 시작 ---")
+    response = react_agent_executor.invoke(question)
+    
+    print("\n--- 최종 답변 ---")
+    print(response.get('output', '답변이 생성되지 않았습니다.'))
