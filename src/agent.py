@@ -176,6 +176,7 @@ def code_generation_node(state: AgentState):
 
 
 
+# 실행 부분
 load_dotenv(dotenv_path="../.env")
 
 # 그래프 정의
@@ -206,10 +207,11 @@ workflow.add_edge("code_generation_node", END) # 새로 추가한 엣지
 # 그래프를 실행 가능한 앱으로 컴파일한다.
 app = workflow.compile()
 
-if __name__ == "__main__":
-    # 이제 코드 생성 질문으로 테스트해보자!
-    inputs = {"question": "LangGraph의 StateGraph에 대해 설명하는 마크다운(md) 형식의 문서를 만들어줘"}
-    final_state = app.invoke(inputs)
+# agent.py 테스트용
+# if __name__ == "__main__":
+#     # 이제 코드 생성 질문으로 테스트해보자!
+#     inputs = {"question": "LangGraph의 StateGraph에 대해 설명하는 마크다운(md) 형식의 문서를 만들어줘"}
+#     final_state = app.invoke(inputs)
 
-    print("\n---최종 상태---")
-    print(final_state.get('answer', '답변이 생성되지 않았습니다.'))
+#     print("\n---최종 상태---")
+#     print(final_state.get('answer', '답변이 생성되지 않았습니다.'))
