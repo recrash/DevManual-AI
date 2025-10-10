@@ -36,7 +36,7 @@ supervisor_chain = (
 # 에이전트 노드: 슈퍼바이저가 다음 행동을 결정하는 노드
 def agent_node(state):
     print("---supervisor node 실행---")
-    response = supervisor_chain.invoke(tools)
+    response = supervisor_chain.invoke(state["messages"]) 
     return {"messages": [response]}
 
 # 도구 노드: 슈퍼바이저의 결정을 받아 실제 도구를 실행하는 노드
