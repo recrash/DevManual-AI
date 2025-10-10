@@ -1,19 +1,19 @@
 import os
 from dotenv import load_dotenv
-from typing import TypedDict, Literal
+from typing import TypedDict, Literal, Optional
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnablePassthrough
 from langchain_community.vectorstores import FAISS
 # 저장된 프롬프트
-from .prompts import rag_prompt
-from .prompts import router_prompt
+from .prompts import rag_prompt, router_prompt, code_gen_prompt
 
 
 class AgentState(TypedDict):
     question: str # 사용자의 원본 질문
-    route: Literal["rag_query", "code_generation", "ambiguous"] # 라우터가 결정한 경로
+    route: Literal["rag_query", "code_generation", "unsupported"] # 라우터가 결정한 경로
+    topic: Optional[str] # 라우터가 식별한 기술 토픽 (e.g., "LangGraph", "Spring Boot")
     answer: str  # RAG 노드가 생성한 답변을 저장할 공간
 
 def router(state: AgentState):
@@ -21,10 +21,27 @@ def router(state: AgentState):
     사용자의 질문을 분석하여 다음 경로를 결정한다.
     """
 
-    print("---라우터 노드 실행---")
+    print("---라우터 노드 실행 (RAG 기반) ---")
     question = state["question"]
 
-    # LLM 및 출력 파서 설정
+    # 1. RAG Retriever 로드 및 컨텍스트 검색
+    print("FAISS에서 관련 문서 검색 중...")
+    embeddings = AzureOpenAIEmbeddings(
+        azure_endpoint=os.getenv("AOAI_ENDPOINT"),
+        api_key=os.getenv("AOAI_API_KEY"),
+        azure_deployment=os.getenv("AOAI_DEPLOY_EMBED_3_SMALL"),
+        api_version="2024-02-01",
+    )
+    db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    retriever = db.as_retriever(search_kwargs={'k': 3}) # 관련 문서 3개만 가져오도록 설정
+
+    retrieved_docs = retriever.invoke(question)
+    # 검색된 문서 내용을 하나의 문자열로 합치기
+    context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
+    print("문서 검색 완료.")
+
+
+    # 2. LLM 및 출력 파서 설정
     llm = AzureChatOpenAI(
         azure_endpoint=os.getenv("AOAI_ENDPOINT"),
         api_key=os.getenv("AOAI_API_KEY"),
@@ -36,12 +53,20 @@ def router(state: AgentState):
     # 프롬프트에서 요구한 대로 JSON으로 리턴받은 결과값을 파싱
     parser = JsonOutputParser()
 
+    # 3. 새로운 라우터 프롬프트 체인 실행 (컨텍스트 포함)
     router_chain = router_prompt | llm | parser
-    response = router_chain.invoke({"question": question})
+    response = router_chain.invoke({
+        "question": question,
+        "context": context_text
+    })
 
-    # 결정된 경로를 상태(State)에 저장
-    print(f"결정된 경로: {response['route']}")
-    state["route"] = response["route"]
+     # 4. 결정된 경로와 토픽을 상태(State)에 저장
+    route = response.get("route", "unsupported")
+    topic = response.get("topic")
+    print(f"결정된 경로: {route}, 토픽: {topic}")
+
+    state["route"] = route
+    state["topic"] = topic
 
     return state
 
@@ -92,12 +117,62 @@ def decide_next_node(state: AgentState):
     라우터의 결정에 따라 다음 노드를 선택한다.
     """
     print("---다음 노드 결정---")
-    if state["route"] == "rag_query":
+    route = state.get("route")
+    
+    if route == "rag_query":
         print("경로: RAG")
         return "rag_node"
-    else:
-        print("경로: 종료")
+    elif route == "code_generation":
+        print("경로: code_generation")
+        return "code_generation_node"
+    else: # "unsupported 인 경우"
+        print("경로: 종료(지원하지 않는 질문")
         return END
+
+def code_generation_node(state: AgentState):
+    """
+    식별된 토픽(topic)과 관련 문서(context)를 기반으로 코드를 생성한다
+    """
+    print("---코드 생성 노드 실행---")
+    question = state["question"]
+    topic = state["topic"]
+
+    # 1. 코드 생성에 더 깊은 컨텍스트를 제공하기 위해 RAG를 다시 실행
+    print(f"'{topic}' 토픽에 대한 코드 생성을 위해 문서 검색 중...")
+    embeddings = AzureOpenAIEmbeddings(
+        azure_endpoint=os.getenv("AOAI_ENDPOINT"),
+        api_key=os.getenv("AOAI_API_KEY"),
+        azure_deployment=os.getenv("AOAI_DEPLOY_EMBED_3_SMALL"),
+        api_version="2024-02-01",
+    )
+    db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    retriever = db.as_retriever(search_kwargs={'k': 5}) # 코드 생성을 위해 문서를 5개 참조
+
+    retrieved_docs = retriever.invoke(question)
+    context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
+    print("문서 검색 완료.")
+
+    # 2. LLM 설정
+    llm = AzureChatOpenAI(
+        azure_endpoint=os.getenv("AOAI_ENDPOINT"),
+        api_key=os.getenv("AOAI_API_KEY"),
+        azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O_MINI"),
+        api_version="2024-02-01",
+        temperature=0.1 # 코드 생성 시에는 약간의 창의성보다 일관성이 중요하므로 온도를 낮게 설정
+    )
+
+    # 3. 코드 생성 프롬프트 체인
+    code_gen_chain = code_gen_prompt | llm | StrOutputParser()
+
+    answer = code_gen_chain.invoke({
+        "question": question,
+        "topic": topic,
+        "context": context_text
+    })
+
+    state["answer"] = answer
+
+    return state
 
 
 
@@ -110,6 +185,7 @@ workflow = StateGraph(AgentState)
 # 노드를 그래프에 추가
 workflow.add_node("router", router)
 workflow.add_node("rag_node", rag_node)
+workflow.add_node("code_generation_node", code_generation_node)
 
 # 그래프의 시작점을 "router" 노드로 설정한다.
 workflow.set_entry_point("router")
@@ -119,19 +195,21 @@ workflow.add_conditional_edges(
     decide_next_node,
     {
         "rag_node": "rag_node",
+        "code_generation_node": "code_generation_node",
         END: END
     }
 )
 
 workflow.add_edge("rag_node", END)
+workflow.add_edge("code_generation_node", END) # 새로 추가한 엣지
 
 # 그래프를 실행 가능한 앱으로 컴파일한다.
 app = workflow.compile()
 
 if __name__ == "__main__":
-    inputs = {"question": "LangGraph의 State가 뭐야?"}
+    # 이제 코드 생성 질문으로 테스트해보자!
+    inputs = {"question": "LangGraph의 StateGraph에 대해 설명하는 마크다운(md) 형식의 문서를 만들어줘"}
     final_state = app.invoke(inputs)
-    
+
     print("\n---최종 상태---")
-    # final_state 딕셔너리에서 'answer' 키의 값을 예쁘게 출력
     print(final_state.get('answer', '답변이 생성되지 않았습니다.'))
