@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from typing import TypedDict, Literal
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnablePassthrough
