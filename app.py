@@ -22,7 +22,7 @@ def load_retriever():
     )
 
     #faiss_index 지정
-    db = FAISS.load_local("scripts/faiss_index", embeddings, allow_dangerous_deserialization=True)
+    db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
     return db.as_retriever()
 

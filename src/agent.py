@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from typing import TypedDict, Literal
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnablePassthrough
@@ -60,7 +60,7 @@ def rag_node(state: AgentState):
         azure_deployment=os.getenv("AOAI_DEPLOY_EMBED_3_SMALL"),
         api_version="2024-02-01",
     )
-    db = FAISS.load_local("/scripts/faiss_index", embeddings, allow_dangerous_deserialization=True)
+    db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
     retriever = db.as_retriever()
 
     # LLM 설정
@@ -77,7 +77,7 @@ def rag_node(state: AgentState):
         {"context": retriever, "question": RunnablePassthrough()}
         | rag_prompt
         | llm
-        | JsonOutputParser()
+        | StrOutputParser()
     )
 
     answer = rag_chain.invoke(question)
