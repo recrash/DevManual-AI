@@ -1,28 +1,33 @@
 import os
+os.environ['GRPC_DNS_RESOLVER'] = 'native'
+from dotenv import load_dotenv
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import Tool
-from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
 from .prompts import rag_prompt, code_gen_prompt
 
+# .env 파일 로드
+load_dotenv()
+
 # --- LLM 및 임베딩 모델 초기화 (도구 내부에서 사용할 모델) ---
 # 도구들이 공통적으로 사용할 LLM과 임베딩 모델을 미리 정의합니다.
-llm = AzureChatOpenAI(
-    azure_endpoint=os.getenv("AOAI_ENDPOINT"),
-    api_key=os.getenv("AOAI_API_KEY"),
-    azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O_MINI"),
-    api_version="2024-02-01",
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
     temperature=0
 )
 
-embeddings = AzureOpenAIEmbeddings(
-    azure_endpoint=os.getenv("AOAI_ENDPOINT"),
-    api_key=os.getenv("AOAI_API_KEY"),
-    azure_deployment=os.getenv("AOAI_DEPLOY_EMBED_3_SMALL"),
-    api_version="2024-02-01",
+ragEmbeddings = GoogleGenerativeAIEmbeddings(
+    model="models/gemini-embedding-001",
+    task_type="RETRIEVAL_QUERY"
+)
+
+codeGenEmbeddings = GoogleGenerativeAIEmbeddings(
+    model="models/gemini-embedding-001",
+    task_type="RETRIEVAL_QUERY"
 )
 
 # --- 1. 웹 검색 도구 ---
@@ -33,7 +38,7 @@ search_tool = DuckDuckGoSearchRun()
 
 # RAG 체인 로직을 함수로 정의합니다.
 def rag_chain(question: str):
-    db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    db = FAISS.load_local("faiss_index", ragEmbeddings, allow_dangerous_deserialization=True)
     retriever = db.as_retriever()
     
     chain = (
@@ -48,7 +53,7 @@ def rag_chain(question: str):
 # 코드 생성 체인 로직을 함수로 정의합니다.
 def code_generation_chain(question: str):
     # 코드 생성 시에는 RAG 검색을 통해 관련성 높은 컨텍스트를 함께 제공합니다.
-    db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    db = FAISS.load_local("faiss_index", codeGenEmbeddings, allow_dangerous_deserialization=True)
     retriever = db.as_retriever(search_kwargs={'k': 5})
     retrieved_docs = retriever.invoke(question)
     context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])

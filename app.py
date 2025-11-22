@@ -3,6 +3,30 @@ from langchain_core.messages import AIMessage, HumanMessage
 from src.agent import app as devmanual_ai_app
 
 
+def extract_text_from_message(message):
+    """Gemini 응답에서 텍스트를 추출합니다.
+
+    Gemini 2.5/3 모델은 content를 리스트 형태로 반환하므로,
+    이를 올바르게 처리하여 텍스트만 추출합니다.
+    """
+    # Gemini 3+ 모델은 .text 속성 제공
+    if hasattr(message, 'text') and message.text:
+        return message.text
+
+    # content가 리스트인 경우 (Gemini 2.5/3)
+    if isinstance(message.content, list):
+        text_parts = []
+        for block in message.content:
+            if isinstance(block, dict) and 'text' in block:
+                text_parts.append(block['text'])
+            elif isinstance(block, str):
+                text_parts.append(block)
+        return ''.join(text_parts)
+
+    # 일반 문자열
+    return message.content
+
+
 # --- 페이지 설정 ---
 st.set_page_config(
     page_title="DevManual-AI",
@@ -22,7 +46,7 @@ for message in st.session_state.messages:
     # langchain의 AIMessage, HumanMessage 객체의 role 속성을 확인합니다.
     if isinstance(message, AIMessage):
         with st.chat_message("assistant"):
-            st.markdown(message.content)
+            st.markdown(extract_text_from_message(message))
     elif isinstance(message, HumanMessage):
         with st.chat_message("user"):
             st.markdown(message.content)
@@ -44,9 +68,9 @@ if prompt := st.chat_input("궁금한 기술이나 코드에 대해 질문해보
             
             # 슈퍼바이저의 최종 답변은 응답의 'messages' 리스트의 마지막에 있습니다.
             final_answer = response['messages'][-1]
-            
-            # 최종 답변을 화면에 출력합니다.
-            st.markdown(final_answer.content)
+
+            # 최종 답변을 화면에 출력합니다. (Gemini 2.5/3 형식 처리)
+            st.markdown(extract_text_from_message(final_answer))
 
     # 3. AI 메시지를 대화 기록에 추가
     # final_answer는 BaseMessage 객체이므로 그대로 추가합니다.

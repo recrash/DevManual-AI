@@ -1,10 +1,11 @@
 import os
+os.environ['GRPC_DNS_RESOLVER'] = 'native'
 from dotenv import load_dotenv
 
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_openai import AzureOpenAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_core.documents import Document
 
 
@@ -45,13 +46,11 @@ def split_docs_into_chunks(docs):
     return splitted_docs
 
 def build_and_save_vector_store(splitted_docs, db_path="faiss_index"):
-    print("Azure OpenAI 임베딩을 시작합니다...")
-        
-    embeddings = AzureOpenAIEmbeddings(        
-        azure_endpoint=os.getenv("AOAI_ENDPOINT"),
-        api_key=os.getenv("AOAI_API_KEY"),
-        azure_deployment=os.getenv("AOAI_DEPLOY_EMBED_3_SMALL"), 
-        api_version="2024-02-01", 
+    print("Google Gemini 임베딩을 시작합니다...")
+
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="models/gemini-embedding-001",
+        task_type="RETRIEVAL_DOCUMENT"
     )
     
     db = FAISS.from_documents(splitted_docs, embeddings)

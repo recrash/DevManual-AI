@@ -74,10 +74,7 @@ LangGraph의 '에이전트 슈퍼바이저' 패턴을 기반으로 구현된 자
     - 프로젝트 루트에 `.env` 파일을 생성합니다.
     - 아래 내용을 파일에 추가하고, 자신의 Azure OpenAI 키 값으로 교체합니다.
     
-    `AOAI_ENDPOINT="YOUR_AZURE_OPENAI_ENDPOINT"
-    AOAI_API_KEY="YOUR_AZURE_OPENAI_API_KEY"
-    AOAI_DEPLOY_GPT4O_MINI="YOUR_GPT4O_MINI_DEPLOYMENT_NAME"
-    AOAI_DEPLOY_EMBED_3_SMALL="YOUR_EMBEDDING_DEPLOYMENT_NAME"`
+    `GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"`
     
 4. **RAG 데이터베이스 구축:**Bash
     - `docs` 폴더에 원하는 기술 문서(.md, .py 등)를 추가합니다.

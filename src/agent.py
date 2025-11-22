@@ -1,10 +1,11 @@
 import os
+os.environ['GRPC_DNS_RESOLVER'] = 'native'
 from dotenv import load_dotenv
 from typing import TypedDict, Annotated, Sequence
 import operator
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph, END
-from langchain_openai import AzureChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .tools import rag_tool, code_gen_tool, search_tool
 
@@ -18,12 +19,9 @@ class AgentState(TypedDict):
 tools = [rag_tool, code_gen_tool, search_tool]
 
 # 도구들을 LLM이 이해할 수 있는 형태로 변환합니다.
-llm = AzureChatOpenAI(
-    azure_endpoint=os.getenv("AOAI_ENDPOINT"),
-    api_key=os.getenv("AOAI_API_KEY"),
-    azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O_MINI"),
-    api_version="2024-02-01",
-    temperature=0
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
+    temperature=0    
 ).bind_tools(tools)
 
 # 슈퍼바이저 역할을 할 LLM 체인을 정의합니다.
