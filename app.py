@@ -4,34 +4,39 @@ from src.agent import app as devmanual_ai_app
 
 
 def extract_text_from_message(message):
-    """Gemini 응답에서 텍스트를 추출합니다.
-
-    Gemini 2.5/3 모델은 content를 리스트 형태로 반환하므로,
-    이를 올바르게 처리하여 텍스트만 추출합니다.
-    """
-    # Gemini 3+ 모델은 .text 속성 제공
+    """Gemini 및 LangChain 메시지 객체에서 텍스트를 안전하게 추출합니다."""
+    # 1. .text 속성이 있는 경우 (일부 Google GenAI 모델 래퍼)
     if hasattr(message, 'text') and message.text:
         return message.text
 
-    # content가 리스트인 경우 (Gemini 2.5/3)
+    # 2. content가 문자열인 경우 (일반적인 경우)
+    if isinstance(message.content, str):
+        return message.content
+
+    # 3. content가 리스트인 경우 (멀티모달 또는 복합 응답)
     if isinstance(message.content, list):
         text_parts = []
         for block in message.content:
-            if isinstance(block, dict) and 'text' in block:
-                text_parts.append(block['text'])
+            if isinstance(block, dict):
+                if 'text' in block:
+                    text_parts.append(block['text'])
+                elif 'type' in block and block['type'] == 'text': # {'type': 'text', 'text': '...'} 형식
+                     text_parts.append(block.get('text', ''))
             elif isinstance(block, str):
                 text_parts.append(block)
         return ''.join(text_parts)
 
-    # 일반 문자열
-    return message.content
+    # 4. 기타 경우 (문자열로 변환 시도)
+    return str(message.content) if message.content else ""
 
 
 # --- 페이지 설정 ---
 st.set_page_config(
     page_title="DevManual-AI",
-    page_icon="🤖"
+    page_icon="🤖",
+    layout="wide"
 )
+
 st.title("👨‍💻 DevManual-AI")
 st.caption("RAG와 LangGraph 기반의 기술 문서 분석 및 코드 생성 AI 에이전트")
 
@@ -43,7 +48,6 @@ if "messages" not in st.session_state:
 
 # 이전 대화 내용 표시
 for message in st.session_state.messages:
-    # langchain의 AIMessage, HumanMessage 객체의 role 속성을 확인합니다.
     if isinstance(message, AIMessage):
         with st.chat_message("assistant"):
             st.markdown(extract_text_from_message(message))
@@ -59,19 +63,27 @@ if prompt := st.chat_input("궁금한 기술이나 코드에 대해 질문해보
 
     # 2. AI 응답 생성 및 표시
     with st.chat_message("assistant"):
-        with st.spinner("AI가 여러 도구를 사용해 생각 중입니다..."):
-            # 슈퍼바이저 에이전트는 전체 대화 기록을 입력으로 받습니다.
-            inputs = {"messages": st.session_state.messages}
-            
-            # 안정성을 위해 .invoke()를 사용해 최종 결과만 한번에 받습니다.
-            response = devmanual_ai_app.invoke(inputs)
-            
-            # 슈퍼바이저의 최종 답변은 응답의 'messages' 리스트의 마지막에 있습니다.
-            final_answer = response['messages'][-1]
+        with st.spinner("AI가 생각 중입니다..."):
+            try:
+                # 슈퍼바이저 에이전트는 전체 대화 기록을 입력으로 받습니다.
+                inputs = {"messages": st.session_state.messages}
+                
+                # 안정성을 위해 .invoke()를 사용해 최종 결과만 한번에 받습니다.
+                response = devmanual_ai_app.invoke(inputs)
+                
+                # 슈퍼바이저의 최종 답변은 응답의 'messages' 리스트의 마지막에 있습니다.
+                final_answer = response['messages'][-1]
+                
+                # 텍스트 추출
+                final_text = extract_text_from_message(final_answer)
 
-            # 최종 답변을 화면에 출력합니다. (Gemini 2.5/3 형식 처리)
-            st.markdown(extract_text_from_message(final_answer))
+                # 최종 답변을 화면에 출력합니다.
+                st.markdown(final_text)
 
-    # 3. AI 메시지를 대화 기록에 추가
-    # final_answer는 BaseMessage 객체이므로 그대로 추가합니다.
-    st.session_state.messages.append(final_answer)
+                # 3. AI 메시지를 대화 기록에 추가
+                # 상태 관리를 위해 단순화된 메시지 객체보다는 원본 객체나 텍스트를 저장하는 것이 좋을 수 있으나,
+                # LangGraph와의 호환성을 위해 반환된 메시지 객체를 그대로 사용합니다.
+                st.session_state.messages.append(final_answer)
+            
+            except Exception as e:
+                st.error(f"오류가 발생했습니다: {e}")
