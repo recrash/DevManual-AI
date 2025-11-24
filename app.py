@@ -24,7 +24,7 @@ def extract_text_from_message(message):
                      text_parts.append(block.get('text', ''))
             elif isinstance(block, str):
                 text_parts.append(block)
-        return ''.join(text_parts)
+        return '\n'.join(text_parts)
 
     # 4. 기타 경우 (문자열로 변환 시도)
     return str(message.content) if message.content else ""

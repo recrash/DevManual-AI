@@ -62,8 +62,7 @@ def code_generation_chain(question: str):
     chain = code_gen_prompt | llm | StrOutputParser()
     return chain.invoke({
         "question": question,
-        "context": context_text,
-        "topic": "사용자의 질문에 명시된 주제" # 감독관이 토픽을 직접 넘겨주지 않으므로 일반화
+        "context": context_text
     })
 
 # RAG 체인의 Tool화
@@ -78,5 +77,5 @@ rag_tool = Tool(
 code_gen_tool = Tool(
     name="code_generator",
     func=code_generation_chain,
-    description="사용자로부터 특정 기능을 수행하는 소스 코드나 마크다운, JSON 등 특정 형식의 문서를 생성해달라는 요청을 받았을 때 사용합니다. '만들어줘', '짜줘', '작성해줘' 같은 키워드가 포함된 경우 유용합니다."
+    description="사용자가 예제 코드 작성, 특정 기능 구현, 소스 코드 생성 등을 요청할 때 **반드시** 사용해야 하는 도구입니다. 직접 코드를 작성하지 말고 이 도구를 호출하세요."
 )

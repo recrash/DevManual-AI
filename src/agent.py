@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from typing import TypedDict, Annotated, Sequence
 import operator
 from langchain_core.messages import BaseMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, END
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -26,15 +27,28 @@ llm = ChatGoogleGenerativeAI(
 
 # 슈퍼바이저 역할을 할 LLM 체인을 정의합니다.
 # 이 체인은 대화 기록을 보고, 다음 행동(어떤 도구를 호출할지, 아니면 끝낼지)을 결정합니다.
-supervisor_chain = (
-    llm
-)
+system_message = """당신은 사용자의 질문에 답변하기 위해 적절한 도구를 선택하고 실행하는 AI 어시스턴트입니다.
+직접 답변을 생성하기보다, 항상 적절한 도구를 사용하여 답변을 생성해야 합니다.
+
+[도구 사용 규칙]
+1. **코드 생성 요청 (`code_generator`)**: 사용자가 예제 코드, 특정 기능 구현, 코드 작성을 요청하면 **반드시** `code_generator` 도구를 사용하세요. 절대 직접 코드를 생성하여 답변하지 마세요.
+2. **지식 검색 (`rag_search`)**: 기술적인 개념, 설명, 라이브러리 사용법 등을 질문하면 `rag_search` 도구를 사용하세요.
+3. **웹 검색 (`search_tool`)**: 최신 정보나 외부 정보가 필요한 경우 사용하세요.
+
+사용자의 요청에 가장 적합한 도구를 선택하여 호출하세요."""
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", system_message),
+    MessagesPlaceholder(variable_name="messages"),
+])
+
+supervisor_chain = prompt | llm
 
 # --- 3. 그래프(Graph) 구성 ---
 # 에이전트 노드: 슈퍼바이저가 다음 행동을 결정하는 노드
 def agent_node(state):
     print("---supervisor node 실행---")
-    response = supervisor_chain.invoke(state["messages"]) 
+    response = supervisor_chain.invoke({"messages": state["messages"]}) 
     return {"messages": [response]}
 
 # 도구 노드: 슈퍼바이저의 결정을 받아 실제 도구를 실행하는 노드
